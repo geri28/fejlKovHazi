@@ -39,7 +39,6 @@ def plot_images(images, titles=None, cols=2, figsize=(10, 6), cmap=None):
 SCALAR_MIDDLE_INTERSECTION = 0.2
 SCALAR_OUTERLINE = 0.65
 IMAGEDICTIONARY = {}
-# TODO: Threshold, és utána a köröket kontúrok miatt
 # OK:1,3,4, 8,9, 10, 11, 13
 # 0, 2 (mutató egyszinű háttérrel), 5 (perc mutató szín miatt eltünik),6 (szinte jó csak mintákbezavarnak),7 (szinek bezavarnak) 12 (nem találja a középpontot), 14(saját kép a minták bezavarnak)
 getImage = images[15]
@@ -51,17 +50,16 @@ modified_image = image.copy()
 handles_image = image.copy()
 
 gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-blurred = cv2.medianBlur(gray, 5)  # helps with smoother edges
+blurred = cv2.medianBlur(gray, 5)  
 bilateralFilter = cv2.bilateralFilter(blurred, 7, sigmaColor=50, sigmaSpace=75)
 _, thresh = cv2.threshold(bilateralFilter, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-edges = cv2.Canny(thresh, 50, 150)  # optional: highlight edges
+edges = cv2.Canny(thresh, 50, 150)  
 
 # plt.imshow(thresh, cmap="gray")
 # plt.title("asd")
 # plt.axis("off")
 # plt.show()
 
-# Option 1: Hough Circle Transform
 circles = cv2.HoughCircles(gray, cv2.HOUGH_GRADIENT, 1.2, 100)
 for circle in circles:
     x, y = [int(val) for val in circle[0][:2]]
@@ -77,10 +75,9 @@ if circles is not None:
     # approx_center = (cx, cy)
     # cv2.circle(image, approx_center, r, (0, 255, 255), 3)
     
-    # Kép közepe (nem a kör, hanem a kép geometriai közepe)
+    # Kép közepe
     image_center = (gray.shape[1] // 2, gray.shape[0] // 2)
 
-    # Kiválasztjuk azt a kört, amelyik középpontja a legközelebb van a kép közepéhez
     closest_circle = min(circles, key=lambda c: np.hypot(c[0] - image_center[0], c[1] - image_center[1]))
     cx, cy, r = map(int, closest_circle)
     approx_center = (cx, cy)
@@ -91,21 +88,18 @@ if circles is not None:
     closest_center = approx_center
     min_distance = float('inf')
 
-    # Frissítjük a középpontot
     cx, cy = closest_center
     center = (cx, cy)
     print(f"🟢 Finomított középpont: {center} (Hough-kör alapján: {approx_center})")
 
-    # Jelöljük az új középpontot
     cv2.circle(image, center, 3, (255, 0, 0), -1)
 
 x, y = center
 
-# Create a mask the size of the original image
+# eredti kép méretéről maszkolás
 mask = np.zeros_like(thresh)
-cv2.circle(mask, (x, y), r, 255, thickness=-1)  # White filled circle on black
+cv2.circle(mask, (x, y), r, 255, thickness=-1)
 
-# Apply the mask to the image
 masked_image = cv2.bitwise_and(thresh, thresh, mask=mask)
 cv2.circle(masked_image, (x, y), int(r-3), (255, 255, 255), 10)
 
@@ -113,13 +107,11 @@ cv2.circle(masked_image, (x, y), int(r-3), (255, 255, 255), 10)
 # Threshold the masked image to get binary image for contour detection
 _, thresh = cv2.threshold(masked_image, 100, 200, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
-# Biztosítsuk, hogy fix nem lóg bele a kiírt órába vagy bármibe
+
 cv2.circle(thresh, (x, y), int(r*SCALAR_OUTERLINE), (255, 255, 255), 5)
-# Középen is kell egy kört csinálni, mert a mérők metszhetik egymást, és így meg tudjuk különböztetni mi melyik mutató.
 cv2.circle(thresh, (x, y), int(r*SCALAR_MIDDLE_INTERSECTION), (255, 255, 255), -1)
 
 
-# Find contours
 contours, _ = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
 center_x, center_y = center
@@ -135,10 +127,9 @@ for cnt in contours:
     
     # Compute distance to center
     dist = np.hypot(cx_cnt - center_x, cy_cnt - center_y)
-    # (Távolság Centertől, Contour, (X, Y))
     contour_candidates.append((dist, cnt, (cx_cnt, cy_cnt)))
 
-# Sort contours by distance to the clock center (closest first)
+# óra közepe által rendezés
 contour_candidates.sort(key=lambda x: x[0])
 
 N = 10  # how many closest to consider
@@ -158,7 +149,6 @@ closest_largest = sorted(
     reverse=True
 )
 
-# Pick the top 2 by area
 top2_contours = closest_largest[:2]
 
 # Draw them
@@ -188,11 +178,10 @@ for area, cnt, centroid in top2_contours:
         "thickness": thickness
     })
 
-# Sort by length to classify
 hand_data_sorted = sorted(hand_data, key=lambda h: h['length'], reverse=True)
 
 if abs(hand_data_sorted[0]['length'] - hand_data_sorted[1]['length']) < hand_data_sorted[0]['length'] * 0.1:
-    print("⚠️ Hasonló hosszú mutatók — vastagság alapján választunk")
+    print("Hasonló hosszú mutatók — vastagság alapján választunk")
     if hand_data_sorted[0]['thickness'] > hand_data_sorted[1]['thickness']:
         minute_hand = hand_data_sorted[1]
         hour_hand = hand_data_sorted[0]
@@ -200,22 +189,21 @@ if abs(hand_data_sorted[0]['length'] - hand_data_sorted[1]['length']) < hand_dat
         minute_hand = hand_data_sorted[0]
         hour_hand = hand_data_sorted[1]
 else:
-    # Alapértelmezett: hosszabb = percmutató
     minute_hand = hand_data_sorted[0]
     hour_hand = hand_data_sorted[1]
+
 def calculate_angle(center, point):
     dx = point[0] - center[0]
     dy = center[1] - point[1]  # Flip Y because image origin is top-left
     angle_rad = math.atan2(dy, dx)
     angle_deg = math.degrees(angle_rad)
-    angle_clockwise = (90 - angle_deg) % 360  # Adjust so 0° is at 12 o'clock
+    angle_clockwise = (90 - angle_deg) % 360 
     return angle_clockwise
 
 # Get angles
 minute_angle = calculate_angle(center, minute_hand["centroid"])
 hour_angle = calculate_angle(center, hour_hand["centroid"])
 
-# Estimate hour and minute
 minute_value = int(round(minute_angle / 6)) % 60
 if(minute_value == 0):
     hour_value = int(((hour_angle / 30)) % 12)+1
