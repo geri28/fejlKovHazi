@@ -69,7 +69,6 @@ center = 0
 r = 0
 if circles is not None:
     circles = np.round(circles[0, :]).astype("int")
-    # Sort circles by radius and pick the smallest
     # smallest_circle = sorted(circles, key=lambda c: c[2])[-1]
     # cx, cy, r = smallest_circle
     # approx_center = (cx, cy)
@@ -84,19 +83,18 @@ if circles is not None:
     cv2.circle(image, approx_center, r, (0, 255, 255), 3)
 
 
-    # ---- ÚJ: pontosítás kontúrok alapján ----
+    
     closest_center = approx_center
     min_distance = float('inf')
 
     cx, cy = closest_center
     center = (cx, cy)
-    print(f"🟢 Finomított középpont: {center} (Hough-kör alapján: {approx_center})")
+    print(f" Finomított középpont: {center} (Hough-kör alapján: {approx_center})")
 
     cv2.circle(image, center, 3, (255, 0, 0), -1)
 
 x, y = center
 
-# eredti kép méretéről maszkolás
 mask = np.zeros_like(thresh)
 cv2.circle(mask, (x, y), r, 255, thickness=-1)
 
@@ -104,9 +102,7 @@ masked_image = cv2.bitwise_and(thresh, thresh, mask=mask)
 cv2.circle(masked_image, (x, y), int(r-3), (255, 255, 255), 10)
 
 
-# Threshold the masked image to get binary image for contour detection
 _, thresh = cv2.threshold(masked_image, 100, 200, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
 
 cv2.circle(thresh, (x, y), int(r*SCALAR_OUTERLINE), (255, 255, 255), 5)
 cv2.circle(thresh, (x, y), int(r*SCALAR_MIDDLE_INTERSECTION), (255, 255, 255), -1)
@@ -129,13 +125,12 @@ for cnt in contours:
     dist = np.hypot(cx_cnt - center_x, cy_cnt - center_y)
     contour_candidates.append((dist, cnt, (cx_cnt, cy_cnt)))
 
-# óra közepe által rendezés
 contour_candidates.sort(key=lambda x: x[0])
 
-N = 10  # how many closest to consider
+N = 10  
 closest_candidates = contour_candidates[:N]
 
-# Compute area and sort by size descending
+# terulet és méret számítása 
 closest_largest = sorted(
     [
         (cv2.contourArea(cnt), cnt, centroid)
@@ -151,7 +146,7 @@ closest_largest = sorted(
 
 top2_contours = closest_largest[:2]
 
-# Draw them
+
 for i, (area, cnt, centroid) in enumerate(top2_contours):
     color = (0, 255, 0) if i == 0 else (0, 0, 255)  # Green and Red
     cv2.drawContours(modified_image, [cnt], -1, color, 2)
@@ -160,12 +155,12 @@ for i, (area, cnt, centroid) in enumerate(top2_contours):
                 cv2.FONT_HERSHEY_SIMPLEX, 0.4, color, 1)
     
 
-# Analyze top 2 by area and classify
+
 hand_data = []
 for area, cnt, centroid in top2_contours:
     length = math.hypot(centroid[0] - x, centroid[1] - y)
 
-    # Vastagság becslés: kontúr bounding box alapján
+    # vastagsag számítás 
     rect = cv2.minAreaRect(cnt)
     (_, _), (w, h), _ = rect
     thickness = min(w, h)
@@ -200,7 +195,7 @@ def calculate_angle(center, point):
     angle_clockwise = (90 - angle_deg) % 360 
     return angle_clockwise
 
-# Get angles
+
 minute_angle = calculate_angle(center, minute_hand["centroid"])
 hour_angle = calculate_angle(center, hour_hand["centroid"])
 
@@ -221,7 +216,6 @@ cv2.drawContours(handles_image, [hour_hand["cnt"]], -1, (255, 0, 0), 2)  # Blue
 cv2.putText(handles_image, f"Hour: {int(hour_value)}", (hour_hand["centroid"][0] + 15, hour_hand["centroid"][1] - 15),
             cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 1)
 
-# Optional debug output
 print(f"Hand-selection by Area:")
 print(f"Hour hand   -  Area: {hour_hand['area']}, Angle: {int(hour_angle)}")
 print(f"Minute hand -  Area: {minute_hand['area']}, Angle: {int(minute_angle)}")
